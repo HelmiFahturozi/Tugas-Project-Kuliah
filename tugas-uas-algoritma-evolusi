@@ -1,0 +1,149 @@
+import random
+import numpy as np
+
+# ==================================================
+# 1. DATA MASALAH
+# ==================================================
+# Jenis roti dan waktu proses (menit)
+PRODUCT_TIME = {
+    1: 10,  # Roti A
+    2: 8,   # Roti B
+    3: 12,  # Roti C
+    4: 6    # Roti D
+}
+
+NUM_MACHINES = 2
+NUM_BATCHES = 12
+
+# Parameter GA
+POP_SIZE = 30
+GENERATIONS = 100
+CROSSOVER_RATE = 0.8
+MUTATION_RATE = 0.1
+
+# ==================================================
+# 2. REPRESENTASI INDIVIDU
+# ==================================================
+def create_individual():
+    """
+    Kromosom:
+    - sequence  : urutan produksi (boleh duplikat)
+    - machines  : alokasi mesin tiap batch
+    """
+    sequence = [random.randint(1, 4) for _ in range(NUM_BATCHES)]
+    machines = [random.randint(1, NUM_MACHINES) for _ in range(NUM_BATCHES)]
+    return (sequence, machines)
+
+def create_population():
+    return [create_individual() for _ in range(POP_SIZE)]
+
+# ==================================================
+# 3. FITNESS FUNCTION (MINIMIZE MAKESPAN)
+# ==================================================
+def calculate_makespan(individual):
+    sequence, machines = individual
+
+    machine_time = {m: 0 for m in range(1, NUM_MACHINES + 1)}
+
+    for job, machine in zip(sequence, machines):
+        machine_time[machine] += PRODUCT_TIME[job]
+
+    return max(machine_time.values())
+
+def fitness(individual):
+    return 1 / calculate_makespan(individual)
+
+# ==================================================
+# 4. SELEKSI (ROULETTE WHEEL)
+# ==================================================
+def roulette_selection(population):
+    fitness_values = np.array([fitness(ind) for ind in population])
+    probabilities = fitness_values / fitness_values.sum()
+    index = np.random.choice(len(population), p=probabilities)
+    return population[index]
+
+# ==================================================
+# 5. CROSSOVER (STABLE ORDER-BASED)
+# ==================================================
+def order_crossover(parent1, parent2):
+    if random.random() > CROSSOVER_RATE:
+        return parent1, parent2
+
+    seq1, mach1 = parent1
+    seq2, mach2 = parent2
+
+    size = len(seq1)
+    a, b = sorted(random.sample(range(size), 2))
+
+    child1_seq = seq1[:a] + seq2[a:b] + seq1[b:]
+    child2_seq = seq2[:a] + seq1[a:b] + seq2[b:]
+
+    child1 = (child1_seq, mach1[:])
+    child2 = (child2_seq, mach2[:])
+
+    return child1, child2
+
+# ==================================================
+# 6. MUTASI (SWAP MUTATION - SAFE)
+# ==================================================
+def swap_mutation(individual):
+    seq, mach = individual
+    length = len(seq)
+
+    if length < 2:
+        return individual
+
+    if random.random() < MUTATION_RATE:
+        i, j = random.sample(range(length), 2)
+        seq[i], seq[j] = seq[j], seq[i]
+
+    return (seq, mach)
+
+# ==================================================
+# 7. ALGORITMA GENETIC
+# ==================================================
+def genetic_algorithm():
+    population = create_population()
+    best_solution = None
+    best_fitness = 0
+
+    for generation in range(GENERATIONS):
+        new_population = []
+
+        for _ in range(POP_SIZE // 2):
+            parent1 = roulette_selection(population)
+            parent2 = roulette_selection(population)
+
+            child1, child2 = order_crossover(parent1, parent2)
+
+            child1 = swap_mutation(child1)
+            child2 = swap_mutation(child2)
+
+            new_population.extend([child1, child2])
+
+        population = new_population
+
+        current_best = max(population, key=fitness)
+        current_fit = fitness(current_best)
+
+        if current_fit > best_fitness:
+            best_solution = current_best
+            best_fitness = current_fit
+
+        if generation % 10 == 0:
+            print(
+                f"Generasi {generation:3d} | "
+                f"Makespan: {calculate_makespan(current_best)}"
+            )
+
+    return best_solution
+
+# ==================================================
+# 8. EKSEKUSI PROGRAM
+# ==================================================
+best = genetic_algorithm()
+
+print("\n=== SOLUSI TERBAIK ===")
+print("Urutan Produksi :", best[0])
+print("Alokasi Mesin  :", best[1])
+print("Makespan       :", calculate_makespan(best))
